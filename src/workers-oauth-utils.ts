@@ -1,7 +1,10 @@
 // workers-oauth-utils.ts
 // OAuth utility functions with CSRF and state validation security fixes
 
-import type { AuthRequest, ClientInfo } from "@cloudflare/workers-oauth-provider";
+import type {
+	AuthRequest,
+	ClientInfo,
+} from "@cloudflare/workers-oauth-provider";
 
 /**
  * OAuth 2.1 compliant error class.
@@ -214,19 +217,28 @@ export function generateCSRFProtection(): CSRFProtectionResult {
  * @returns Object containing clearCookie header to invalidate the token
  * @throws {OAuthError} If CSRF token is missing or mismatched
  */
-export function validateCSRFToken(formData: FormData, request: Request): ValidateCSRFResult {
+export function validateCSRFToken(
+	formData: FormData,
+	request: Request,
+): ValidateCSRFResult {
 	const csrfCookieName = "__Host-CSRF_TOKEN";
 
 	const tokenFromForm = formData.get("csrf_token");
 
 	if (!tokenFromForm || typeof tokenFromForm !== "string") {
-		throw new OAuthError("invalid_request", "Missing CSRF token in form data", 400);
+		throw new OAuthError(
+			"invalid_request",
+			"Missing CSRF token in form data",
+			400,
+		);
 	}
 
 	const cookieHeader = request.headers.get("Cookie") || "";
 	const cookies = cookieHeader.split(";").map((c) => c.trim());
 	const csrfCookie = cookies.find((c) => c.startsWith(`${csrfCookieName}=`));
-	const tokenFromCookie = csrfCookie ? csrfCookie.substring(csrfCookieName.length + 1) : null;
+	const tokenFromCookie = csrfCookie
+		? csrfCookie.substring(csrfCookieName.length + 1)
+		: null;
 
 	if (!tokenFromCookie) {
 		throw new OAuthError("invalid_request", "Missing CSRF token cookie", 400);
@@ -280,7 +292,9 @@ export async function createOAuthState(
  * @param stateToken - The state token to bind to the session
  * @returns Object containing the Set-Cookie header to send to the client
  */
-export async function bindStateToSession(stateToken: string): Promise<BindStateResult> {
+export async function bindStateToSession(
+	stateToken: string,
+): Promise<BindStateResult> {
 	const consentedStateCookieName = "__Host-CONSENTED_STATE";
 
 	// Hash the state token to provide defense-in-depth
@@ -288,7 +302,9 @@ export async function bindStateToSession(stateToken: string): Promise<BindStateR
 	const data = encoder.encode(stateToken);
 	const hashBuffer = await crypto.subtle.digest("SHA-256", data);
 	const hashArray = Array.from(new Uint8Array(hashBuffer));
-	const hashHex = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+	const hashHex = hashArray
+		.map((b) => b.toString(16).padStart(2, "0"))
+		.join("");
 
 	const setCookie = `${consentedStateCookieName}=${hashHex}; HttpOnly; Secure; Path=/; SameSite=Lax; Max-Age=600`;
 
@@ -330,7 +346,9 @@ export async function validateOAuthState(
 	// by checking that the state hash matches the session cookie
 	const cookieHeader = request.headers.get("Cookie") || "";
 	const cookies = cookieHeader.split(";").map((c) => c.trim());
-	const consentedStateCookie = cookies.find((c) => c.startsWith(`${consentedStateCookieName}=`));
+	const consentedStateCookie = cookies.find((c) =>
+		c.startsWith(`${consentedStateCookieName}=`),
+	);
 	const consentedStateHash = consentedStateCookie
 		? consentedStateCookie.substring(consentedStateCookieName.length + 1)
 		: null;
@@ -348,7 +366,9 @@ export async function validateOAuthState(
 	const data = encoder.encode(stateFromQuery);
 	const hashBuffer = await crypto.subtle.digest("SHA-256", data);
 	const hashArray = Array.from(new Uint8Array(hashBuffer));
-	const stateHash = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+	const stateHash = hashArray
+		.map((b) => b.toString(16).padStart(2, "0"))
+		.join("");
 
 	if (stateHash !== consentedStateHash) {
 		throw new OAuthError(
@@ -386,7 +406,10 @@ export async function isClientApproved(
 	clientId: string,
 	cookieSecret: string,
 ): Promise<boolean> {
-	const approvedClients = await getApprovedClientsFromCookie(request, cookieSecret);
+	const approvedClients = await getApprovedClientsFromCookie(
+		request,
+		cookieSecret,
+	);
 	return approvedClients?.includes(clientId) ?? false;
 }
 
@@ -407,7 +430,9 @@ export async function addApprovedClient(
 
 	const existingApprovedClients =
 		(await getApprovedClientsFromCookie(request, cookieSecret)) || [];
-	const updatedApprovedClients = Array.from(new Set([...existingApprovedClients, clientId]));
+	const updatedApprovedClients = Array.from(
+		new Set([...existingApprovedClients, clientId]),
+	);
 
 	const payload = JSON.stringify(updatedApprovedClients);
 	const signature = await signData(payload, cookieSecret);
@@ -436,7 +461,7 @@ export interface ApprovalDialogOptions {
 	 * Arbitrary state data to pass through the approval flow
 	 * Will be encoded in the form and returned when approval is complete
 	 */
-	state: Record<string, any>;
+	state: Record<string, unknown>;
 	/**
 	 * CSRF token to include in the form
 	 */
@@ -456,19 +481,30 @@ export interface ApprovalDialogOptions {
  * @param options - Configuration for the approval dialog
  * @returns A Response containing the HTML approval dialog
  */
-export function renderApprovalDialog(request: Request, options: ApprovalDialogOptions): Response {
+export function renderApprovalDialog(
+	request: Request,
+	options: ApprovalDialogOptions,
+): Response {
 	const { client, server, state, csrfToken, setCookie } = options;
 
 	const encodedState = btoa(JSON.stringify(state));
 
 	const serverName = sanitizeText(server.name);
-	const clientName = client?.clientName ? sanitizeText(client.clientName) : "Unknown MCP Client";
-	const serverDescription = server.description ? sanitizeText(server.description) : "";
+	const clientName = client?.clientName
+		? sanitizeText(client.clientName)
+		: "Unknown MCP Client";
+	const serverDescription = server.description
+		? sanitizeText(server.description)
+		: "";
 
 	// Validate URLs then HTML-escape for safe use in attributes
 	const logoUrl = server.logo ? sanitizeText(sanitizeUrl(server.logo)) : "";
-	const clientUri = client?.clientUri ? sanitizeText(sanitizeUrl(client.clientUri)) : "";
-	const policyUri = client?.policyUri ? sanitizeText(sanitizeUrl(client.policyUri)) : "";
+	const clientUri = client?.clientUri
+		? sanitizeText(sanitizeUrl(client.clientUri))
+		: "";
+	const policyUri = client?.policyUri
+		? sanitizeText(sanitizeUrl(client.policyUri))
+		: "";
 	const tosUri = client?.tosUri ? sanitizeText(sanitizeUrl(client.tosUri)) : "";
 
 	const contacts =
@@ -689,8 +725,8 @@ export function renderApprovalDialog(request: Request, options: ApprovalDialogOp
               </div>
 
               ${
-					clientUri
-						? `
+								clientUri
+									? `
                 <div class="client-detail">
                   <div class="detail-label">Website:</div>
                   <div class="detail-value small">
@@ -700,12 +736,12 @@ export function renderApprovalDialog(request: Request, options: ApprovalDialogOp
                   </div>
                 </div>
               `
-						: ""
-				}
+									: ""
+							}
 
               ${
-					policyUri
-						? `
+								policyUri
+									? `
                 <div class="client-detail">
                   <div class="detail-label">Privacy Policy:</div>
                   <div class="detail-value">
@@ -715,12 +751,12 @@ export function renderApprovalDialog(request: Request, options: ApprovalDialogOp
                   </div>
                 </div>
               `
-						: ""
-				}
+									: ""
+							}
 
               ${
-					tosUri
-						? `
+								tosUri
+									? `
                 <div class="client-detail">
                   <div class="detail-label">Terms of Service:</div>
                   <div class="detail-value">
@@ -730,12 +766,12 @@ export function renderApprovalDialog(request: Request, options: ApprovalDialogOp
                   </div>
                 </div>
               `
-						: ""
-				}
+									: ""
+							}
 
               ${
-					redirectUris.length > 0
-						? `
+								redirectUris.length > 0
+									? `
                 <div class="client-detail">
                   <div class="detail-label">Redirect URIs:</div>
                   <div class="detail-value small">
@@ -743,19 +779,19 @@ export function renderApprovalDialog(request: Request, options: ApprovalDialogOp
                   </div>
                 </div>
               `
-						: ""
-				}
+									: ""
+							}
 
               ${
-					contacts
-						? `
+								contacts
+									? `
                 <div class="client-detail">
                   <div class="detail-label">Contact:</div>
                   <div class="detail-value">${contacts}</div>
                 </div>
               `
-						: ""
-				}
+									: ""
+							}
             </div>
 
             <p>This MCP Client is requesting to be authorized on ${serverName}. If you approve, you will be redirected to complete authentication.</p>
@@ -797,11 +833,15 @@ async function getApprovedClientsFromCookie(
 	if (!cookieHeader) return null;
 
 	const cookies = cookieHeader.split(";").map((c) => c.trim());
-	const targetCookie = cookies.find((c) => c.startsWith(`${approvedClientsCookieName}=`));
+	const targetCookie = cookies.find((c) =>
+		c.startsWith(`${approvedClientsCookieName}=`),
+	);
 
 	if (!targetCookie) return null;
 
-	const cookieValue = targetCookie.substring(approvedClientsCookieName.length + 1);
+	const cookieValue = targetCookie.substring(
+		approvedClientsCookieName.length + 1,
+	);
 	const parts = cookieValue.split(".");
 
 	if (parts.length !== 2) return null;
@@ -830,7 +870,11 @@ async function getApprovedClientsFromCookie(
 async function signData(data: string, secret: string): Promise<string> {
 	const key = await importKey(secret);
 	const enc = new TextEncoder();
-	const signatureBuffer = await crypto.subtle.sign("HMAC", key, enc.encode(data));
+	const signatureBuffer = await crypto.subtle.sign(
+		"HMAC",
+		key,
+		enc.encode(data),
+	);
 	return Array.from(new Uint8Array(signatureBuffer))
 		.map((b) => b.toString(16).padStart(2, "0"))
 		.join("");
@@ -845,9 +889,14 @@ async function verifySignature(
 	const enc = new TextEncoder();
 	try {
 		const signatureBytes = new Uint8Array(
-			signatureHex.match(/.{1,2}/g)!.map((byte) => Number.parseInt(byte, 16)),
+			signatureHex.match(/.{1,2}/g)?.map((byte) => Number.parseInt(byte, 16)),
 		);
-		return await crypto.subtle.verify("HMAC", key, signatureBytes.buffer, enc.encode(data));
+		return await crypto.subtle.verify(
+			"HMAC",
+			key,
+			signatureBytes.buffer,
+			enc.encode(data),
+		);
 	} catch (_e) {
 		return false;
 	}

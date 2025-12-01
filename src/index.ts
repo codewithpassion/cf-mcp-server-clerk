@@ -10,7 +10,7 @@ import type { Props } from "./utils";
 const ALLOWED_ROLES = new Set<string>([
 	"admin",
 	"premium",
-	"image_generation"
+	"image_generation",
 	// Add more roles as needed
 ]);
 
@@ -40,16 +40,20 @@ export class MyMCP extends McpAgent<Env, Record<string, never>, Props> {
 				return {
 					content: [
 						{
-							text: JSON.stringify({
-								userId: this.props!.userId,
-								sessionId: this.props!.sessionId,
-								email: this.props!.email,
-								firstName: this.props!.firstName,
-								lastName: this.props!.lastName,
-								imageUrl: this.props!.imageUrl,
-								role: this.props!.role,
-								metadata: this.props!.metadata,
-							}, null, 2),
+							text: JSON.stringify(
+								{
+									userId: this.props?.userId,
+									sessionId: this.props?.sessionId,
+									email: this.props?.email,
+									firstName: this.props?.firstName,
+									lastName: this.props?.lastName,
+									imageUrl: this.props?.imageUrl,
+									role: this.props?.role,
+									metadata: this.props?.metadata,
+								},
+								null,
+								2,
+							),
 							type: "text",
 						},
 					],
@@ -60,7 +64,7 @@ export class MyMCP extends McpAgent<Env, Record<string, never>, Props> {
 		console.log("User props:", this.props);
 		// Dynamically add tools based on the user's role
 		// Only users with specific roles can access the image generation tool
-		if (this.props!.role && ALLOWED_ROLES.has(this.props!.role)) {
+		if (this.props?.role && ALLOWED_ROLES.has(this.props?.role)) {
 			this.server.tool(
 				"generateImage",
 				"Generate an image using the `flux-1-schnell` model. Works best with 8 steps.",
@@ -78,13 +82,22 @@ export class MyMCP extends McpAgent<Env, Record<string, never>, Props> {
 						),
 				},
 				async ({ prompt, steps }) => {
-					const response = await this.env.AI.run("@cf/black-forest-labs/flux-1-schnell", {
-						prompt,
-						steps,
-					});
+					const response = await this.env.AI.run(
+						"@cf/black-forest-labs/flux-1-schnell",
+						{
+							prompt,
+							steps,
+						},
+					);
+
+					if (!response.image) {
+						throw new Error("Failed to generate image");
+					}
 
 					return {
-						content: [{ data: response.image!, mimeType: "image/jpeg", type: "image" }],
+						content: [
+							{ data: response.image, mimeType: "image/jpeg", type: "image" },
+						],
 					};
 				},
 			);
@@ -101,7 +114,7 @@ const oauthProvider = new OAuthProvider({
 	},
 	authorizeEndpoint: "/authorize",
 	clientRegistrationEndpoint: "/register",
-	defaultHandler: ClerkHandler as any,
+	defaultHandler: ClerkHandler as unknown as ExportedHandler,
 	tokenEndpoint: "/token",
 });
 
@@ -117,11 +130,16 @@ const oauthProvider = new OAuthProvider({
  * 2. Adds resource_metadata parameter to WWW-Authenticate headers on 401 responses
  */
 export default {
-	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+	async fetch(
+		request: Request,
+		env: Env,
+		ctx: ExecutionContext,
+	): Promise<Response> {
 		const response = await oauthProvider.fetch(request, env, ctx);
 
 		const url = new URL(request.url);
-		const isHTTPS = url.hostname !== "localhost" && !url.hostname.startsWith("127.");
+		const isHTTPS =
+			url.hostname !== "localhost" && !url.hostname.startsWith("127.");
 
 		// Fix OAuth Authorization Server metadata to use HTTPS for tunnels
 		if (
@@ -129,14 +147,14 @@ export default {
 			url.pathname === "/.well-known/oauth-authorization-server" &&
 			response.status === 200
 		) {
-			const metadata = await response.json<Record<string, any>>();
+			const metadata = await response.json<Record<string, unknown>>();
 
 			// Replace all http:// URLs with https:// in the metadata
 			const fixedMetadata = JSON.parse(
 				JSON.stringify(metadata).replace(
 					new RegExp(`http://${url.hostname}`, "g"),
-					`https://${url.hostname}`
-				)
+					`https://${url.hostname}`,
+				),
 			);
 
 			return new Response(JSON.stringify(fixedMetadata), {
@@ -164,13 +182,13 @@ export default {
 				// Append resource_metadata to existing header
 				newHeaders.set(
 					"WWW-Authenticate",
-					`${existingAuth}, resource_metadata="${resourceMetadataUrl}"`
+					`${existingAuth}, resource_metadata="${resourceMetadataUrl}"`,
 				);
 			} else {
 				// Create new WWW-Authenticate header
 				newHeaders.set(
 					"WWW-Authenticate",
-					`Bearer resource_metadata="${resourceMetadataUrl}"`
+					`Bearer resource_metadata="${resourceMetadataUrl}"`,
 				);
 			}
 

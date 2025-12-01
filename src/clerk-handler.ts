@@ -1,7 +1,10 @@
 import { env } from "cloudflare:workers";
-import type { AuthRequest, OAuthHelpers } from "@cloudflare/workers-oauth-provider";
-import { Hono } from "hono";
 import { verifyToken } from "@clerk/backend";
+import type {
+	AuthRequest,
+	OAuthHelpers,
+} from "@cloudflare/workers-oauth-provider";
+import { Hono } from "hono";
 import { getUpstreamAuthorizeUrl, type Props } from "./utils";
 import {
 	addApprovedClient,
@@ -46,7 +49,7 @@ app.get("/.well-known/oauth-protected-resource", (c) => {
 		resource: resourceUrl,
 		authorization_servers: [authServerUrl],
 		bearer_methods_supported: ["header"],
-		scopes_supported: ["mcp:*"]
+		scopes_supported: ["mcp:*"],
 	});
 });
 
@@ -69,7 +72,12 @@ function getCallbackUrl(request: Request): string {
 	url.hash = ""; // Remove any hash
 
 	const redirectUri = url.href;
-	console.log("[getCallbackUrl] Generated redirect_uri:", redirectUri, "from hostname:", url.hostname);
+	console.log(
+		"[getCallbackUrl] Generated redirect_uri:",
+		redirectUri,
+		"from hostname:",
+		url.hostname,
+	);
 	return redirectUri;
 }
 
@@ -84,8 +92,11 @@ app.get("/authorize", async (c) => {
 	if (await isClientApproved(c.req.raw, clientId, env.COOKIE_ENCRYPTION_KEY)) {
 		// Skip approval dialog but still create secure state and bind to session
 		const { stateToken } = await createOAuthState(oauthReqInfo, c.env.OAUTH_KV);
-		const { setCookie: sessionBindingCookie } = await bindStateToSession(stateToken);
-		return redirectToClerk(c.req.raw, stateToken, { "Set-Cookie": sessionBindingCookie });
+		const { setCookie: sessionBindingCookie } =
+			await bindStateToSession(stateToken);
+		return redirectToClerk(c.req.raw, stateToken, {
+			"Set-Cookie": sessionBindingCookie,
+		});
 	}
 
 	// Generate CSRF protection for the approval form
@@ -95,7 +106,8 @@ app.get("/authorize", async (c) => {
 		client: await c.env.OAUTH_PROVIDER.lookupClient(clientId),
 		csrfToken,
 		server: {
-			description: "This is a demo MCP Remote Server using Clerk for authentication.",
+			description:
+				"This is a demo MCP Remote Server using Clerk for authentication.",
 			logo: "https://avatars.githubusercontent.com/u/49538330?s=200&v=4",
 			name: "Cloudflare Clerk MCP Server",
 		},
@@ -137,8 +149,12 @@ app.post("/authorize", async (c) => {
 		);
 
 		// Create OAuth state and bind it to this user's session
-		const { stateToken } = await createOAuthState(state.oauthReqInfo, c.env.OAUTH_KV);
-		const { setCookie: sessionBindingCookie } = await bindStateToSession(stateToken);
+		const { stateToken } = await createOAuthState(
+			state.oauthReqInfo,
+			c.env.OAUTH_KV,
+		);
+		const { setCookie: sessionBindingCookie } =
+			await bindStateToSession(stateToken);
 
 		// Set both cookies: approved client list + session binding
 		const headers = new Headers();
@@ -146,13 +162,14 @@ app.post("/authorize", async (c) => {
 		headers.append("Set-Cookie", sessionBindingCookie);
 
 		return redirectToClerk(c.req.raw, stateToken, Object.fromEntries(headers));
-	} catch (error: any) {
+	} catch (error: unknown) {
 		console.error("POST /authorize error:", error);
 		if (error instanceof OAuthError) {
 			return error.toResponse();
 		}
 		// Unexpected non-OAuth error
-		return c.text(`Internal server error: ${error.message}`, 500);
+		const message = error instanceof Error ? error.message : "Unknown error";
+		return c.text(`Internal server error: ${message}`, 500);
 	}
 });
 
@@ -206,7 +223,7 @@ app.get("/callback", async (c) => {
 		const result = await validateOAuthState(c.req.raw, c.env.OAUTH_KV);
 		oauthReqInfo = result.oauthReqInfo;
 		clearSessionCookie = result.clearCookie;
-	} catch (error: any) {
+	} catch (error) {
 		if (error instanceof OAuthError) {
 			return error.toResponse();
 		}
@@ -225,7 +242,9 @@ app.get("/callback", async (c) => {
 
 	// Exchange the code for tokens (access_token + id_token)
 	const tokenEndpoint = `${c.env.CLERK_FRONTEND_API}/oauth/token`;
-	const basicAuth = btoa(`${c.env.CLERK_CLIENT_ID}:${c.env.CLERK_CLIENT_SECRET}`);
+	const basicAuth = btoa(
+		`${c.env.CLERK_CLIENT_ID}:${c.env.CLERK_CLIENT_SECRET}`,
+	);
 	const redirectUri = getCallbackUrl(c.req.raw);
 	console.log("[/callback] Exchanging code with redirect_uri:", redirectUri);
 
@@ -254,12 +273,12 @@ app.get("/callback", async (c) => {
 	}>();
 
 	// Verify the JWT and extract user data from claims
-	let verifiedToken;
+	let verifiedToken: Awaited<ReturnType<typeof verifyToken> | undefined>;
 	try {
 		verifiedToken = await verifyToken(tokenData.id_token, {
 			secretKey: c.env.CLERK_SECRET_KEY,
 		});
-	} catch (error: any) {
+	} catch (error: unknown) {
 		console.error("Token verification failed:", error);
 		return c.text("Failed to verify token", 500);
 	}
@@ -274,13 +293,15 @@ app.get("/callback", async (c) => {
 
 	// Extract role from public_metadata if available
 	console.log("Verified token claims:", verifiedToken);
-	const publicMetadata = (verifiedToken.public_metadata as Record<string, unknown>) || {};
+	const publicMetadata =
+		(verifiedToken.public_metadata as Record<string, unknown>) || {};
 	const role = publicMetadata.role as string | undefined;
 
 	// Return back to the MCP client a new token
 	const { redirectTo } = await c.env.OAUTH_PROVIDER.completeAuthorization({
 		metadata: {
-			label: firstName && lastName ? `${firstName} ${lastName}` : email || userId,
+			label:
+				firstName && lastName ? `${firstName} ${lastName}` : email || userId,
 		},
 		// This will be available on this.props inside MyMCP
 		props: {
