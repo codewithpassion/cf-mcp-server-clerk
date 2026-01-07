@@ -77,7 +77,7 @@ Wrangler secrets (do not commit):
 1. Install dependencies: `npm install`
 2. Create Clerk application at https://dashboard.clerk.com
 3. Create OAuth application in Clerk Dashboard (redirect URI: `http://localhost:8788/callback`)
-4. Copy `.env.example` to `.dev.vars` and fill in Clerk credentials
+4. Copy `.env.example` to `.env` and fill in Clerk credentials
 5. Generate `COOKIE_ENCRYPTION_KEY`: `openssl rand -hex 32`
 6. Set user roles in Clerk Dashboard: Users → [select user] → Metadata → Public → `{"role": "admin"}`
 

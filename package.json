@@ -6,6 +6,7 @@
 		"deploy": "wrangler deploy",
 		"dev": "wrangler dev",
 		"start": "wrangler dev",
+		"tunnel": "cloudflared tunnel --url http://localhost:8788",
 		"cf-typegen": "wrangler types",
 		"lint": "biome check .",
 		"type-check": "tsc --noEmit",
@@ -27,6 +28,6 @@
 		"husky": "^9.1.7",
 		"prettier": "^3.6.2",
 		"typescript": "5.9.3",
-		"wrangler": "^4.45.2"
+		"wrangler": "^4.54.0"
 	}
 }

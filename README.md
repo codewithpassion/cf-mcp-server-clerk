@@ -111,7 +111,7 @@ Once the Tools (under 🔨) show up in the interface, you can ask Claude to use 
 If you'd like to iterate and test your MCP server, you can do so in local development:
 
 1. In Clerk Dashboard, update your OAuth application's redirect URI to include `http://localhost:8788/callback`
-2. Copy `.env.example` to `.dev.vars` and fill in your Clerk credentials:
+2. Copy `.env.example` to `.env` and fill in your Clerk credentials:
 ```
 CLERK_CLIENT_ID=your_clerk_client_id
 CLERK_CLIENT_SECRET=your_clerk_client_secret
