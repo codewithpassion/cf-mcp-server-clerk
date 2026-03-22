@@ -1,13 +1,7 @@
+export type { Props } from "./types.js";
+
 /**
- * Constructs an authorization URL for an upstream service.
- *
- * @param {Object} options
- * @param {string} options.upstream_url - The base URL of the upstream service.
- * @param {string} options.client_id - The client ID of the application.
- * @param {string} options.redirect_uri - The redirect URI of the application.
- * @param {string} [options.state] - The state parameter.
- *
- * @returns {string} The authorization URL.
+ * Constructs an authorization URL for the upstream Clerk OAuth service.
  */
 export function getUpstreamAuthorizeUrl({
 	upstream_url,
@@ -21,7 +15,7 @@ export function getUpstreamAuthorizeUrl({
 	scope: string;
 	redirect_uri: string;
 	state?: string;
-}) {
+}): string {
 	const upstream = new URL(upstream_url);
 	upstream.searchParams.set("client_id", client_id);
 	upstream.searchParams.set("redirect_uri", redirect_uri);
@@ -32,71 +26,76 @@ export function getUpstreamAuthorizeUrl({
 }
 
 /**
- * Fetches an authorization token from an upstream service.
- *
- * @param {Object} options
- * @param {string} options.client_id - The client ID of the application.
- * @param {string} options.client_secret - The client secret of the application.
- * @param {string} options.code - The authorization code.
- * @param {string} options.redirect_uri - The redirect URI of the application.
- * @param {string} options.upstream_url - The token endpoint URL of the upstream service.
- *
- * @returns {Promise<[string, null] | [null, Response]>} A promise that resolves to an array containing the access token or an error response.
+ * Sanitizes text content for safe display in HTML by escaping special characters.
  */
-export async function fetchUpstreamAuthToken({
-	client_id,
-	client_secret,
-	code,
-	redirect_uri,
-	upstream_url,
-}: {
-	code: string | undefined;
-	upstream_url: string;
-	client_secret: string;
-	redirect_uri: string;
-	client_id: string;
-}): Promise<[string, null] | [null, Response]> {
-	if (!code) {
-		return [null, new Response("Missing code", { status: 400 })];
-	}
-
-	const resp = await fetch(upstream_url, {
-		body: new URLSearchParams({
-			client_id,
-			client_secret,
-			code,
-			redirect_uri,
-		}).toString(),
-		headers: {
-			"Content-Type": "application/x-www-form-urlencoded",
-		},
-		method: "POST",
-	});
-	if (!resp.ok) {
-		console.log(await resp.text());
-		return [
-			null,
-			new Response("Failed to fetch access token", { status: 500 }),
-		];
-	}
-	const body = await resp.formData();
-	const accessToken = body.get("access_token") as string;
-	if (!accessToken) {
-		return [null, new Response("Missing access token", { status: 400 })];
-	}
-	return [accessToken, null];
+export function sanitizeText(text: string): string {
+	return text
+		.replace(/&/g, "&amp;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;")
+		.replace(/"/g, "&quot;")
+		.replace(/'/g, "&#039;");
 }
 
-// Context from the auth process, encrypted & stored in the auth token
-// and provided to the DurableMCP as this.props
-export type Props = {
-	userId: string;
-	sessionId: string;
-	email?: string;
-	firstName?: string;
-	lastName?: string;
-	imageUrl?: string;
-	role?: string; // from public_metadata
-	metadata?: Record<string, unknown>; // custom fields from public_metadata
-	[key: string]: unknown; // Index signature for McpAgent compatibility
-};
+/**
+ * Validates a URL for security using an allowlist approach.
+ * Only allows https: and http: schemes. Returns empty string on failure.
+ */
+export function sanitizeUrl(url: string): string {
+	const normalized = url.trim();
+	if (normalized.length === 0) return "";
+
+	// Reject control characters (RFC 3986)
+	for (let i = 0; i < normalized.length; i++) {
+		const code = normalized.charCodeAt(i);
+		if ((code >= 0x00 && code <= 0x1f) || (code >= 0x7f && code <= 0x9f)) {
+			return "";
+		}
+	}
+
+	let parsedUrl: URL;
+	try {
+		parsedUrl = new URL(normalized);
+	} catch {
+		return "";
+	}
+
+	const scheme = parsedUrl.protocol.slice(0, -1).toLowerCase();
+	if (scheme !== "https" && scheme !== "http") return "";
+
+	return normalized;
+}
+
+/**
+ * Builds the OAuth callback URL from the current request,
+ * fixing the protocol to HTTPS when running behind cloudflared.
+ */
+export function getCallbackUrl(request: Request): string {
+	const url = new URL(request.url);
+	if (isHTTPS(request)) {
+		url.protocol = "https:";
+	}
+	url.pathname = "/callback";
+	url.search = "";
+	return url.href;
+}
+
+/**
+ * Detects whether the original request was made over HTTPS,
+ * checking the X-Forwarded-Proto header (set by cloudflared/reverse proxies).
+ */
+export function isHTTPS(request: Request): boolean {
+	const proto = request.headers.get("x-forwarded-proto");
+	if (proto === "https") return true;
+
+	const url = new URL(request.url);
+	return url.protocol === "https:";
+}
+
+/**
+ * Returns the cookie name prefix based on the environment.
+ * Uses "__Host-" in production (requires Secure flag) or "" in development.
+ */
+export function cookiePrefix(): string {
+	return process.env.NODE_ENV === "production" ? "__Host-" : "";
+}

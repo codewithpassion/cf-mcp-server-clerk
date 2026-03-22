@@ -1,0 +1,9 @@
+{
+	"servers": {
+		"claude": {
+			"command": "claude",
+			"args": ["mcp", "serve"],
+			"env": {}
+		}
+	}
+}
